@@ -1,16 +1,15 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Inter ,Outfit } from "next/font/google";
+import { ClerkProvider, Show, SignInButton, SignUpButton, UserButton } from '@clerk/nextjs'
 import "./globals.css";
+import { cn } from "@/lib/utils";
+import  Provider  from "./Provider"
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const inter = Inter({subsets:['latin'],variable:'--font-sans'});
+const outfit = Outfit({subsets:['latin']});
+
+
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -19,11 +18,15 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">{children}</body>
+    <ClerkProvider>
+      <html
+        lang="en"
+        className={outfit.className}
+        >
+      <body className="min-h-full flex flex-col ">
+        <Provider>{children}</Provider>
+      </body>
     </html>
+    </ClerkProvider>
   );
 }
