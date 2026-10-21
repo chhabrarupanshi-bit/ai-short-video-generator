@@ -9,53 +9,51 @@ import {
   ArrowRight, 
   ShieldCheck, 
   Layers, 
-  Crown,
-  ChevronRight
+  Crown
 } from "lucide-react";
 
 export default function HomePage() {
   const { isSignedIn, isLoaded } = useUser();
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden bg-[#060813] text-white selection:bg-indigo-500 selection:text-white">
-      {/* Background Ambient Glows */}
-      <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-[280px] sm:h-[500px] w-[340px] sm:w-[800px] rounded-full bg-gradient-to-tr from-indigo-600/20 via-purple-600/20 to-transparent blur-[100px] sm:blur-[140px]" />
-      <div className="pointer-events-none absolute -left-20 sm:-left-40 top-1/3 h-[250px] sm:h-[400px] w-[300px] sm:w-[500px] rounded-full bg-cyan-500/10 blur-[100px] sm:blur-[130px]" />
-      <div className="pointer-events-none absolute -right-20 sm:-right-40 bottom-20 h-[280px] sm:h-[450px] w-[320px] sm:w-[550px] rounded-full bg-purple-600/15 blur-[100px] sm:blur-[140px]" />
+    <div className="relative min-h-screen w-full overflow-hidden bg-[#050711] text-white selection:bg-indigo-500 selection:text-white">
+      {/* Dynamic Ambient Background Glows */}
+      <div className="pointer-events-none absolute left-1/2 -top-20 -translate-x-1/2 h-[340px] w-[360px] sm:w-[750px] rounded-full bg-gradient-to-b from-indigo-500/25 via-purple-600/15 to-transparent blur-[90px]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:24px_24px] opacity-40" />
 
-      {/* 1. NAVBAR - Mobile Adaptive */}
-      <header className="relative z-30 mx-auto flex max-w-7xl items-center justify-between px-3.5 py-4 sm:px-8 sm:py-6">
-        <Link href="/" className="flex items-center gap-2 sm:gap-3">
-          <div className="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 shadow-md sm:shadow-lg shadow-indigo-600/30">
-            <Video className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+      {/* 1. NAVBAR */}
+      <header className="relative z-30 mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-8 sm:py-5">
+        <Link href="/" className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 shadow-md shadow-indigo-500/30 ring-1 ring-white/15">
+            <Video className="h-4 w-4 text-white" />
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-sm sm:text-lg font-black tracking-tight text-white whitespace-nowrap">
+            <span className="text-[15px] sm:text-base font-bold tracking-tight text-white">
               AI Video Engine
             </span>
-            <span className="hidden xs:inline text-[9px] sm:text-xs font-semibold uppercase tracking-wider text-indigo-400 border border-indigo-500/30 bg-indigo-500/10 px-1.5 sm:px-2 py-0.5 rounded-full">
+            <span className="rounded-full border border-indigo-400/30 bg-indigo-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-indigo-300">
               Studio
             </span>
           </div>
         </Link>
 
-        <nav className="flex items-center gap-2 sm:gap-4">
+        <nav className="flex items-center gap-2">
           {!isLoaded ? (
-            <div className="h-7 w-20 sm:h-8 sm:w-24 animate-pulse rounded-xl bg-white/10" />
+            <div className="h-8 w-20 animate-pulse rounded-lg bg-white/10" />
           ) : isSignedIn ? (
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2.5">
               <Link
                 href="/dashboard"
-                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-white shadow-md sm:shadow-lg shadow-indigo-600/30 transition-all hover:scale-105 active:scale-95"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-md shadow-indigo-600/30 transition-all hover:opacity-95 active:scale-95"
               >
                 <span>Dashboard</span>
-                <ArrowRight className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                <ArrowRight className="h-3.5 w-3.5" />
               </Link>
-              <div className="flex items-center justify-center rounded-full border border-indigo-400/30 p-0.5 bg-[#0b0f19]">
+              <div className="flex items-center justify-center rounded-full border border-white/10 p-0.5 bg-[#0e1326]">
                 <UserButton
                   appearance={{
                     elements: {
-                      userButtonAvatarBox: "h-7 w-7 sm:h-8 sm:w-8",
+                      userButtonAvatarBox: "h-7 w-7",
                       userButtonTrigger: "focus:outline-none",
                     },
                   }}
@@ -63,19 +61,19 @@ export default function HomePage() {
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 sm:gap-3">
+            <div className="flex items-center gap-2">
               <Link
                 href="/sign-in"
-                className="rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-semibold text-slate-300 transition-all hover:bg-white/10 hover:text-white"
+                className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-300 transition-all hover:bg-white/10 hover:text-white"
               >
                 Sign In
               </Link>
               <Link
                 href="/sign-up"
-                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-white shadow-md sm:shadow-lg shadow-indigo-600/30 transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-md shadow-indigo-600/30 transition-all hover:opacity-95 active:scale-95"
               >
                 <span>Get Started</span>
-                <ArrowRight className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
           )}
@@ -83,31 +81,32 @@ export default function HomePage() {
       </header>
 
       {/* 2. HERO SECTION */}
-      <main className="relative z-10 mx-auto max-w-5xl px-4 pt-8 pb-16 text-center sm:px-8 sm:pt-20 sm:pb-24">
-        {/* Release Pill Badge */}
-        <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3.5 py-1 sm:px-4 sm:py-1.5 text-[11px] sm:text-xs font-semibold text-indigo-300 backdrop-blur-md transition-all hover:border-indigo-400/50">
-          <Sparkles className="h-3.5 w-3.5 animate-pulse text-indigo-400" />
+      <main className="relative z-20 mx-auto max-w-4xl px-4 pt-6 pb-16 text-center sm:pt-16 sm:pb-24">
+        {/* Subtle Pill */}
+        <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/20 bg-indigo-500/[0.08] px-3.5 py-1 text-[11px] font-medium text-indigo-300 backdrop-blur-md">
+          <Sparkles className="h-3 w-3 text-indigo-400" />
           <span>Next-Gen AI Short Video Generator</span>
         </div>
 
-        {/* Scaled Responsive Heading */}
-        <h1 className="mt-4 sm:mt-6 text-2xl xs:text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.2] sm:leading-[1.15]">
-          Generate Viral Shorts <br className="hidden xs:inline" />
-          <span className="bg-gradient-to-r from-white via-indigo-200 to-[#a5b0f0] bg-clip-text text-transparent">
-            From A Single Topic in Seconds.
-          </span>
+        {/* Polished Heading with Visual Punch */}
+        <h1 className="mt-5 text-[28px] xs:text-3xl sm:text-5xl md:text-6xl font-black tracking-tight leading-[1.18] sm:leading-[1.12]">
+          Generate Viral Shorts{" "}
+          <span className="bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300 bg-clip-text text-transparent">
+            From A Single Topic
+          </span>{" "}
+          in Seconds.
         </h1>
 
-        {/* Scaled Responsive Description */}
-        <p className="mx-auto mt-3.5 sm:mt-6 max-w-2xl px-2 text-xs sm:text-sm md:text-base leading-relaxed text-[#8a94b8]">
-          Automate scripts, dynamic style-based image generation, AI voiceover sync, and word-by-word captions designed exclusively for YouTube Shorts, Reels, and TikTok.
+        {/* Crisp Subtitle */}
+        <p className="mx-auto mt-3.5 max-w-xl text-[13px] sm:text-sm md:text-base leading-relaxed text-slate-400">
+          Automate scripts, dynamic style-based image generation, AI voiceover sync, and captions designed for YouTube Shorts, Reels, and TikTok.
         </p>
 
-        {/* Scaled Responsive CTA Buttons */}
-        <div className="mt-7 sm:mt-10 flex flex-col items-center justify-center gap-3 sm:gap-4 sm:flex-row px-2">
+        {/* Polished Action Buttons */}
+        <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4 max-w-sm mx-auto sm:max-w-none">
           <Link
             href={isSignedIn ? "/dashboard" : "/sign-up"}
-            className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-600 to-indigo-500 bg-[length:200%_auto] px-7 py-3.5 text-xs sm:text-sm font-bold uppercase tracking-wider text-white shadow-xl shadow-indigo-600/30 transition-all hover:bg-[position:right_center] hover:scale-105 active:scale-95"
+            className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 px-6 py-3 text-xs sm:text-sm font-bold tracking-wide text-white shadow-lg shadow-indigo-600/35 transition-all hover:brightness-110 active:scale-95"
           >
             <span>{isSignedIn ? "Go To Workspace" : "Start Creating Free"}</span>
             <ArrowRight className="h-4 w-4" />
@@ -115,49 +114,52 @@ export default function HomePage() {
 
           <Link
             href={isSignedIn ? "/dashboard/upgrade" : "/sign-in"}
-            className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-6 py-3.5 text-xs sm:text-sm font-semibold text-slate-200 backdrop-blur-xl transition-all hover:bg-white/10 hover:border-white/20"
+            className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-white/10 bg-[#0f1429]/70 px-5 py-3 text-xs sm:text-sm font-medium text-slate-300 backdrop-blur-md transition-all hover:border-white/20 hover:text-white active:scale-95"
           >
-            <Crown className="h-4 w-4 text-yellow-400" />
+            <Crown className="h-4 w-4 text-amber-400" />
             <span>Explore Pricing & Credits</span>
           </Link>
         </div>
 
-        {/* Feature Highlights Grid */}
-        <div className="mt-12 sm:mt-20 grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-3 text-left">
-          <div className="rounded-2xl sm:rounded-3xl border border-white/10 bg-[#0b0f19]/80 p-5 sm:p-6 backdrop-blur-xl shadow-lg">
-            <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
-              <Zap className="h-5 w-5 sm:h-6 sm:w-6" />
+        {/* Subtle Visual Divider Line */}
+        <div className="mt-12 mx-auto h-px w-24 bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent" />
+
+        {/* Modern Feature Cards */}
+        <div className="mt-10 grid grid-cols-1 gap-3.5 sm:gap-5 sm:grid-cols-3 text-left">
+          <div className="rounded-2xl border border-white/[0.08] bg-[#0c1022]/60 p-5 backdrop-blur-md transition-all hover:border-indigo-500/30">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+              <Zap className="h-4 w-4" />
             </div>
-            <h3 className="mt-3.5 sm:mt-4 text-sm sm:text-base font-bold text-white">AI Script & Voiceover</h3>
-            <p className="mt-1.5 sm:mt-2 text-xs leading-relaxed text-[#8a94b8]">
-              Instant multi-scene script synthesis paired with natural-sounding text-to-speech audio pipelines.
+            <h3 className="mt-3 text-sm font-semibold text-white">AI Script & Voiceover</h3>
+            <p className="mt-1 text-xs leading-relaxed text-slate-400">
+              Multi-scene script synthesis paired with natural text-to-speech audio pipelines.
             </p>
           </div>
 
-          <div className="rounded-2xl sm:rounded-3xl border border-white/10 bg-[#0b0f19]/80 p-5 sm:p-6 backdrop-blur-xl shadow-lg">
-            <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400">
-              <Layers className="h-5 w-5 sm:h-6 sm:w-6" />
+          <div className="rounded-2xl border border-white/[0.08] bg-[#0c1022]/60 p-5 backdrop-blur-md transition-all hover:border-purple-500/30">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400">
+              <Layers className="h-4 w-4" />
             </div>
-            <h3 className="mt-3.5 sm:mt-4 text-sm sm:text-base font-bold text-white">5 Visual Art Styles</h3>
-            <p className="mt-1.5 sm:mt-2 text-xs leading-relaxed text-[#8a94b8]">
-              Switch effortlessly across Comic, GTA vector art, Cartoon 3D, Realistic 8K, and WaterColor.
+            <h3 className="mt-3 text-sm font-semibold text-white">5 Visual Art Styles</h3>
+            <p className="mt-1 text-xs leading-relaxed text-slate-400">
+              Switch across Comic, GTA art, Cartoon 3D, Realistic 8K, and WaterColor.
             </p>
           </div>
 
-          <div className="rounded-2xl sm:rounded-3xl border border-white/10 bg-[#0b0f19]/80 p-5 sm:p-6 backdrop-blur-xl shadow-lg">
-            <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-              <ShieldCheck className="h-5 w-5 sm:h-6 sm:w-6" />
+          <div className="rounded-2xl border border-white/[0.08] bg-[#0c1022]/60 p-5 backdrop-blur-md transition-all hover:border-emerald-500/30">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+              <ShieldCheck className="h-4 w-4" />
             </div>
-            <h3 className="mt-3.5 sm:mt-4 text-sm sm:text-base font-bold text-white">Full SaaS Infrastructure</h3>
-            <p className="mt-1.5 sm:mt-2 text-xs leading-relaxed text-[#8a94b8]">
-              Powered by Clerk Auth, Neon PostgreSQL, Drizzle ORM, and secure Razorpay payment verification.
+            <h3 className="mt-3 text-sm font-semibold text-white">Full SaaS Infrastructure</h3>
+            <p className="mt-1 text-xs leading-relaxed text-slate-400">
+              Powered by Clerk Auth, Neon PostgreSQL, Drizzle ORM, and Razorpay payments.
             </p>
           </div>
         </div>
       </main>
 
       {/* 3. FOOTER */}
-      <footer className="relative z-10 border-t border-white/5 py-6 sm:py-8 text-center text-[11px] sm:text-xs text-[#8a94b8]">
+      <footer className="relative z-10 border-t border-white/[0.06] py-6 text-center text-[11px] text-slate-500">
         <p>© {new Date().getFullYear()} AI Video Engine Studio. All rights reserved.</p>
       </footer>
     </div>
