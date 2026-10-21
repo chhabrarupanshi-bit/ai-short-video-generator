@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { db } from "@/confige/db";
 import { Users } from "@/confige/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 // Har plan ke fixed credits
 const PLAN_CREDITS = {
@@ -14,15 +14,17 @@ const PLAN_CREDITS = {
 
 export async function POST(req) {
   try {
-    const { paymentId, orderId, signature, planId, userEmail, userName } =
-      await req.json();
-
-    console.log("=== UPDATE CREDITS CALLED ===", {
-      userEmail,
-      planId,
-      paymentId,
-      orderId,
-    });
+    const body = await req.json();
+    const { 
+      userEmail, 
+      userName, 
+      deduct, 
+      creditsToDeduct = 35, // 👈 100 me se 35 deduct hoga toh exact 2-3 video banegi
+      paymentId, 
+      orderId, 
+      signature, 
+      planId 
+    } = body;
 
     if (!userEmail) {
       return NextResponse.json(
@@ -31,7 +33,65 @@ export async function POST(req) {
       );
     }
 
-    // 1. Razorpay Signature Verification
+    // =========================================================================
+    // 1. DEDUCT MODE: JAB USER VIDEO GENERATE KARE (LOOPHOLE FIX)
+    // =========================================================================
+    if (deduct) {
+      const existingUsers = await db
+        .select()
+        .from(Users)
+        .where(eq(Users.email, userEmail));
+
+      if (!existingUsers || existingUsers.length === 0) {
+        return NextResponse.json(
+          { success: false, error: "User not found" },
+          { status: 404 }
+        );
+      }
+
+      const currentCredits = Number(existingUsers[0].credits || 0);
+
+      // Agar user ke paas sufficient credit nahi hai
+      if (currentCredits < creditsToDeduct) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Insufficient credits! Please upgrade to continue creating videos.",
+            currentCredits,
+          },
+          { status: 403 }
+        );
+      }
+
+      // Database mein atomic deduction
+      const updatedUser = await db
+        .update(Users)
+        .set({
+          credits: sql`${Users.credits} - ${creditsToDeduct}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(Users.email, userEmail))
+        .returning();
+
+      console.log(`[CREDITS DEDUCTED] ${userEmail}: Deducted ${creditsToDeduct}, Remaining: ${updatedUser[0].credits}`);
+
+      return NextResponse.json({
+        success: true,
+        message: "Credits deducted successfully",
+        remainingCredits: updatedUser[0].credits,
+      });
+    }
+
+    // =========================================================================
+    // 2. PAYMENT MODE: JAB RAZORPAY SE PLAN UPGRADE HO
+    // =========================================================================
+    console.log("=== UPDATE CREDITS CALLED (PAYMENT) ===", {
+      userEmail,
+      planId,
+      paymentId,
+      orderId,
+    });
+
     const secret =
       process.env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_API_SECRET;
 
@@ -55,11 +115,9 @@ export async function POST(req) {
       );
     }
 
-    // Normalized plan key aur direct fixed credits (Add nahi honge)
     const normalizedPlan = (planId || "pro").toLowerCase();
     const assignedCredits = PLAN_CREDITS[normalizedPlan] || 2500;
 
-    // 2. Database update: subscription true aur fixed credits set karein
     const existingUsers = await db
       .select()
       .from(Users)
@@ -69,9 +127,9 @@ export async function POST(req) {
       await db
         .update(Users)
         .set({
-          subscription: true,             // 👈 Boolean true
-          subscriptionPlan: normalizedPlan, // "pro"
-          credits: assignedCredits,       // 2500
+          subscription: true,
+          subscriptionPlan: normalizedPlan,
+          credits: assignedCredits,
           paymentId: paymentId,
           orderId: orderId,
           updatedAt: new Date(),
@@ -85,7 +143,7 @@ export async function POST(req) {
       await db.insert(Users).values({
         name: userName || "User",
         email: userEmail,
-        subscription: true,               // 👈 Naye user ke liye bhi TRUE
+        subscription: true,
         subscriptionPlan: normalizedPlan,
         credits: assignedCredits,
         paymentId: paymentId,
