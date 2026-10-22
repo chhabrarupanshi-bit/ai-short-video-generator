@@ -14,17 +14,12 @@ import { getVideoByIdServer } from "@/app/_actions/video";
 import { useRouter } from "next/navigation";
 import { Download, Loader2 } from "lucide-react";
 
-/**
- * PlayerDialog Component
- * Displays a 9:16 vertical short preview player powered by Remotion.
- * Features full video capture (images + captions + audio) directly into a video file.
- */
 const PlayerDialog = ({ playVideo, videoId }) => {
   const [openDialog, setOpenDialog] = useState(false);
   const [videoRecord, setVideoRecord] = useState(null);
   const [durationInFrames, setDurationInFrames] = useState(120);
   const [downloading, setDownloading] = useState(false);
-  const [progressText, setProgressText] = useState("");
+  const [renderProgress, setRenderProgress] = useState(0);
 
   const playerRef = useRef(null);
   const router = useRouter();
@@ -39,10 +34,8 @@ const PlayerDialog = ({ playVideo, videoId }) => {
   const GetVideoData = async () => {
     try {
       const res = await getVideoByIdServer(videoId);
-
       if (res?.success && res?.data) {
         setVideoRecord(res.data);
-
         const captions = res.data?.captions;
         if (Array.isArray(captions) && captions.length > 0) {
           const lastWordEnd = captions[captions.length - 1]?.end;
@@ -57,78 +50,82 @@ const PlayerDialog = ({ playVideo, videoId }) => {
     }
   };
 
-  // 🎥 FULL VIDEO RECORDER (Visuals + Changing Images + Captions + Audio)
+  // 🎬 Client-side Full Video Compositor (Images + Audio + Captions)
   const handleDownloadFullVideo = async () => {
     if (!videoRecord) return;
 
     setDownloading(true);
-    setProgressText("Starting video recorder...");
+    setRenderProgress(5);
 
     try {
-      const playerWrapper = document.getElementById("remotion-player-container");
-      if (!playerWrapper) throw new Error("Player container not found");
+      const images = videoRecord?.imageList || [];
+      const captions = videoRecord?.captions || [];
+      const audioUrl = videoRecord?.audioFileUrl;
 
-      // Player ko shuruat se start karein
-      if (playerRef.current) {
-        playerRef.current.seekTo(0);
-        playerRef.current.play();
+      const canvas = document.createElement("canvas");
+      canvas.width = 720;
+      canvas.height = 1280;
+      const ctx = canvas.getContext("2d");
+
+      // 1. Preload all scene images
+      setRenderProgress(15);
+      const loadedImages = await Promise.all(
+        images.map((src) => {
+          return new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(null);
+            img.src = src;
+          });
+        })
+      );
+
+      const validImages = loadedImages.filter(Boolean);
+      if (validImages.length === 0) {
+        throw new Error("No visual scenes loaded");
       }
 
-      // 1. Audio stream ready karein
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const dest = audioCtx.createMediaStreamDestination();
+      // 2. Setup Audio Track
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const audioDestination = audioContext.createMediaStreamDestination();
+      let audioNode = null;
 
-      if (videoRecord?.audioFileUrl) {
+      if (audioUrl) {
         const audio = new Audio();
         audio.crossOrigin = "anonymous";
-        audio.src = videoRecord.audioFileUrl;
-        const source = audioCtx.createMediaElementSource(audio);
-        source.connect(dest);
-        source.connect(audioCtx.destination);
-        audio.play();
+        audio.src = audioUrl;
+        audioNode = audio;
+        const source = audioContext.createMediaElementSource(audio);
+        source.connect(audioDestination);
+        source.connect(audioContext.destination);
       }
 
-      // 2. Video element / canvas stream capture
-      const videoOrCanvas =
-        playerWrapper.querySelector("canvas") ||
-        playerWrapper.querySelector("video");
+      // 3. Setup Video Stream & MediaRecorder
+      const canvasStream = canvas.captureStream(30);
+      const outputTracks = [...canvasStream.getVideoTracks()];
 
-      let visualStream = null;
-      if (videoOrCanvas && typeof videoOrCanvas.captureStream === "function") {
-        visualStream = videoOrCanvas.captureStream(30);
+      const audioTrack = audioDestination.stream.getAudioTracks()[0];
+      if (audioTrack) {
+        outputTracks.push(audioTrack);
       }
 
-      // 3. Combined Tracks
-      const combinedTracks = [];
-      if (visualStream) {
-        visualStream.getVideoTracks().forEach((t) => combinedTracks.push(t));
-      }
-      dest.stream.getAudioTracks().forEach((t) => combinedTracks.push(t));
-
-      // Agar direct element capture na ho paye toh fallback standard video stream
-      if (combinedTracks.length === 0) {
-        alert("Video stream direct record nahi ho payi. Direct audio/image link open kar rahe hain.");
-        if (videoRecord?.videoUrl) window.open(videoRecord.videoUrl, "_blank");
-        setDownloading(false);
-        return;
-      }
-
-      const finalStream = new MediaStream(combinedTracks);
+      const combinedStream = new MediaStream(outputTracks);
       const mimeType = MediaRecorder.isTypeSupported("video/mp4")
         ? "video/mp4"
         : "video/webm";
 
-      const recorder = new MediaRecorder(finalStream, { mimeType });
-      const recordedChunks = [];
+      const recorder = new MediaRecorder(combinedStream, { mimeType });
+      const chunks = [];
 
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) recordedChunks.push(e.data);
+        if (e.data.size > 0) chunks.push(e.data);
       };
 
       recorder.onstop = () => {
-        const videoBlob = new Blob(recordedChunks, { type: mimeType });
+        const blob = new Blob(chunks, { type: mimeType });
         const ext = mimeType.includes("mp4") ? "mp4" : "webm";
-        const downloadUrl = window.URL.createObjectURL(videoBlob);
+        const downloadUrl = URL.createObjectURL(blob);
 
         const a = document.createElement("a");
         a.href = downloadUrl;
@@ -136,36 +133,93 @@ const PlayerDialog = ({ playVideo, videoId }) => {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        window.URL.revokeObjectURL(downloadUrl);
+        URL.revokeObjectURL(downloadUrl);
 
         setDownloading(false);
-        setProgressText("");
+        setRenderProgress(0);
       };
 
       recorder.start();
-      setProgressText("Recording video in progress...");
+      if (audioNode) audioNode.play();
 
-      const totalDurationMs = (durationInFrames / 30) * 1000;
+      const totalDurationSec = durationInFrames / 30;
+      const startTime = performance.now();
 
-      setTimeout(() => {
-        if (recorder.state === "recording") {
+      // 4. Render Frame-by-Frame Loop
+      const renderLoop = () => {
+        const elapsedSec = (performance.now() - startTime) / 1000;
+        const elapsedMs = elapsedSec * 1000;
+
+        if (elapsedSec >= totalDurationSec) {
           recorder.stop();
-          if (playerRef.current) playerRef.current.pause();
+          if (audioNode) audioNode.pause();
+          return;
         }
-      }, totalDurationMs + 500);
+
+        // Calculate active image
+        const imgIndex = Math.min(
+          Math.floor((elapsedSec / totalDurationSec) * validImages.length),
+          validImages.length - 1
+        );
+        const activeImg = validImages[imgIndex];
+
+        // Draw background scene
+        if (activeImg) {
+          ctx.drawImage(activeImg, 0, 0, 720, 1280);
+        }
+
+        // Draw active caption text
+        const currentCaption = captions.find(
+          (c) => elapsedMs >= c.start && elapsedMs <= c.end
+        );
+
+        if (currentCaption && currentCaption.text) {
+          ctx.save();
+          ctx.font = "bold 52px sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+
+          // Caption background tag
+          const text = currentCaption.text;
+          const textMetrics = ctx.measureText(text);
+          const padding = 24;
+
+          ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+          ctx.roundRect?.(
+            360 - textMetrics.width / 2 - padding,
+            1050 - 35,
+            textMetrics.width + padding * 2,
+            70,
+            16
+          ) || ctx.fillRect(
+            360 - textMetrics.width / 2 - padding,
+            1050 - 35,
+            textMetrics.width + padding * 2,
+            70
+          );
+          ctx.fill();
+
+          // Caption text
+          ctx.fillStyle = "#ffffff";
+          ctx.fillText(text, 360, 1050);
+          ctx.restore();
+        }
+
+        setRenderProgress(Math.min(Math.round((elapsedSec / totalDurationSec) * 100), 99));
+        requestAnimationFrame(renderLoop);
+      };
+
+      requestAnimationFrame(renderLoop);
 
     } catch (err) {
-      console.error("Recording error:", err);
-      alert("Browser ne direct video capture block kar diya. Media link direct open kar rahe hain.");
+      console.error("Video export pipeline error:", err);
+      alert("Video export karne me dikkat aayi, please try again.");
       setDownloading(false);
-      setProgressText("");
+      setRenderProgress(0);
     }
   };
 
-  const handleCancel = () => {
-    setOpenDialog(false);
-  };
-
+  const handleCancel = () => setOpenDialog(false);
   const handleExport = () => {
     setOpenDialog(false);
     router.push("/dashboard");
@@ -174,7 +228,6 @@ const PlayerDialog = ({ playVideo, videoId }) => {
   return (
     <Dialog open={openDialog} onOpenChange={setOpenDialog}>
       <DialogContent className="w-[92vw] max-w-[420px] rounded-3xl border border-white/10 bg-[#0b0f19] p-4 sm:p-6 text-white shadow-2xl backdrop-blur-xl">
-        {/* MODAL HEADER */}
         <DialogHeader className="w-full text-center">
           <DialogTitle className="bg-gradient-to-r from-white via-indigo-200 to-indigo-400 bg-clip-text text-lg sm:text-xl font-bold text-transparent">
             Your Video is Ready
@@ -184,11 +237,8 @@ const PlayerDialog = ({ playVideo, videoId }) => {
           </DialogDescription>
         </DialogHeader>
 
-        {/* ================= 9:16 VERTICAL REMOTION PLAYER ================= */}
-        <div
-          id="remotion-player-container"
-          className="relative mt-2 sm:mt-3 flex aspect-[9/16] max-h-[55vh] sm:max-h-none sm:h-[460px] w-full justify-center overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl"
-        >
+        {/* 9:16 PLAYER */}
+        <div className="relative mt-2 sm:mt-3 flex aspect-[9/16] max-h-[55vh] sm:max-h-none sm:h-[460px] w-full justify-center overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl">
           {videoRecord ? (
             <Player
               ref={playerRef}
@@ -217,9 +267,8 @@ const PlayerDialog = ({ playVideo, videoId }) => {
           )}
         </div>
 
-        {/* ================= MODAL ACTIONS ================= */}
+        {/* ACTIONS */}
         <div className="mt-4 sm:mt-5 flex flex-col gap-2.5 w-full">
-          {/* 📥 REAL FULL VIDEO DOWNLOAD BUTTON */}
           <button
             type="button"
             onClick={handleDownloadFullVideo}
@@ -229,7 +278,7 @@ const PlayerDialog = ({ playVideo, videoId }) => {
             {downloading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>{progressText || "Processing Video..."}</span>
+                <span>Generating Video File ({renderProgress}%)...</span>
               </>
             ) : (
               <>
