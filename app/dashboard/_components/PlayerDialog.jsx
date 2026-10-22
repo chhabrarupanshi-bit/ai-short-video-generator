@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Player } from "@remotion/player";
 import {
   Dialog,
@@ -17,18 +17,19 @@ import { Download, Loader2 } from "lucide-react";
 /**
  * PlayerDialog Component
  * Displays a 9:16 vertical short preview player powered by Remotion.
- * Features automated frame calculation based on caption timings,
- * responsive modal scaling for mobile devices, and gallery download controls.
+ * Features client-side video frame capture to save complete video directly to gallery.
  */
 const PlayerDialog = ({ playVideo, videoId }) => {
   const [openDialog, setOpenDialog] = useState(false);
   const [videoRecord, setVideoRecord] = useState(null);
   const [durationInFrames, setDurationInFrames] = useState(120);
   const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
 
+  const playerRef = useRef(null);
   const router = useRouter();
 
-  // Sync dialog visibility and fetch asset record when videoId updates
+  // Dialog visibility & database record sync
   useEffect(() => {
     setOpenDialog(Boolean(playVideo));
     if (videoId) {
@@ -36,17 +37,15 @@ const PlayerDialog = ({ playVideo, videoId }) => {
     }
   }, [playVideo, videoId]);
 
-  // Fetch full video record from Neon PostgreSQL via Server Action
+  // Fetch full video record from Neon PostgreSQL
   const GetVideoData = async () => {
     try {
       console.log("Fetching DB row securely for videoId:", videoId);
       const res = await getVideoByIdServer(videoId);
 
       if (res?.success && res?.data) {
-        console.log("=== VIDEO ROW FETCHED SECURELY ===", res.data);
         setVideoRecord(res.data);
 
-        // Dynamically compute total Remotion composition frames based on AssemblyAI caption end-times
         const captions = res.data?.captions;
         if (Array.isArray(captions) && captions.length > 0) {
           const lastWordEnd = captions[captions.length - 1]?.end;
@@ -63,55 +62,122 @@ const PlayerDialog = ({ playVideo, videoId }) => {
     }
   };
 
-  // Direct device storage / gallery download handler
+  // 🎬 Real Video (.webm/.mp4) Export & Gallery Download Handler
   const handleDownloadToGallery = async () => {
-    const downloadTarget =
-      videoRecord?.videoUrl ||
-      videoRecord?.audioFileUrl ||
-      (videoRecord?.imageList && videoRecord?.imageList[0]);
-
-    if (!downloadTarget) {
-      alert("Koi downloadable media link nahi mila!");
+    // 1. Agar backend pe direct MP4 URL pehle se bana hai
+    if (videoRecord?.videoUrl && videoRecord.videoUrl.endsWith(".mp4")) {
+      try {
+        setDownloading(true);
+        const response = await fetch(videoRecord.videoUrl);
+        const blob = await response.blob();
+        triggerFileDownload(blob, `ai-short-video-${Date.now()}.mp4`);
+      } catch (e) {
+        window.open(videoRecord.videoUrl, "_blank");
+      } finally {
+        setDownloading(false);
+      }
       return;
     }
 
-    setDownloading(true);
+    // 2. Client-side Canvas + Audio Stream Capture
+    const playerContainer = document.querySelector("#remotion-player-container");
+    const canvasElement = playerContainer?.querySelector("canvas");
+
+    if (!canvasElement || typeof canvasElement.captureStream !== "function") {
+      // Fallback agar canvas stream support na ho toh pehli scene image export karein
+      fallbackAssetDownload();
+      return;
+    }
 
     try {
-      const response = await fetch(downloadTarget);
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
+      setDownloading(true);
+      setDownloadProgress(10);
 
-      const link = document.createElement("a");
-      link.href = blobUrl;
+      const canvasStream = canvasElement.captureStream(30);
+      const combinedTracks = [...canvasStream.getVideoTracks()];
 
-      // File extension determination
-      const ext = downloadTarget.includes(".mp3")
-        ? "mp3"
-        : downloadTarget.includes(".png")
-        ? "png"
-        : "mp4";
+      // Audio track sync agar available ho
+      const audioElement = playerContainer?.querySelector("audio");
+      if (audioElement && typeof audioElement.captureStream === "function") {
+        const audioStream = audioElement.captureStream();
+        const audioTrack = audioStream.getAudioTracks()[0];
+        if (audioTrack) combinedTracks.push(audioTrack);
+      }
 
-      link.download = `ai-short-video-${Date.now()}.${ext}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
+      const mediaStream = new MediaStream(combinedTracks);
+      const mimeType = MediaRecorder.isTypeSupported("video/mp4")
+        ? "video/mp4"
+        : "video/webm";
+
+      const recorder = new MediaRecorder(mediaStream, { mimeType });
+      const chunks = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          chunks.push(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const videoBlob = new Blob(chunks, { type: mimeType });
+        const ext = mimeType.includes("mp4") ? "mp4" : "webm";
+        triggerFileDownload(videoBlob, `ai-short-video-${Date.now()}.${ext}`);
+        setDownloading(false);
+        setDownloadProgress(0);
+      };
+
+      // Player ko start position par le jayein aur record karein
+      if (playerRef.current) {
+        playerRef.current.seekTo(0);
+        playerRef.current.play();
+      }
+
+      recorder.start();
+
+      const totalDurationMs = (durationInFrames / 30) * 1000;
+      const intervalTimer = setInterval(() => {
+        setDownloadProgress((prev) => Math.min(prev + 15, 95));
+      }, totalDurationMs / 6);
+
+      setTimeout(() => {
+        clearInterval(intervalTimer);
+        if (recorder.state === "recording") {
+          recorder.stop();
+          if (playerRef.current) playerRef.current.pause();
+        }
+      }, totalDurationMs + 400);
+
     } catch (err) {
-      console.error("Direct blob download error:", err);
-      // Fallback: Opens media file directly in browser tab so user can long-press save
-      window.open(downloadTarget, "_blank");
-    } finally {
+      console.error("Client video capture failed:", err);
+      fallbackAssetDownload();
       setDownloading(false);
     }
   };
 
-  // Closes dialog without redirect
+  const triggerFileDownload = (blob, filename) => {
+    const blobUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(blobUrl);
+  };
+
+  const fallbackAssetDownload = () => {
+    const imgUrl = videoRecord?.imageList?.[0];
+    if (imgUrl) {
+      window.open(imgUrl, "_blank");
+    } else if (videoRecord?.audioFileUrl) {
+      window.open(videoRecord.audioFileUrl, "_blank");
+    }
+  };
+
   const handleCancel = () => {
     setOpenDialog(false);
   };
 
-  // Closes dialog and routes creator to the main dashboard workspace
   const handleExport = () => {
     setOpenDialog(false);
     router.push("/dashboard");
@@ -131,9 +197,13 @@ const PlayerDialog = ({ playVideo, videoId }) => {
         </DialogHeader>
 
         {/* ================= 9:16 VERTICAL REMOTION PLAYER ================= */}
-        <div className="relative mt-2 sm:mt-3 flex aspect-[9/16] max-h-[55vh] sm:max-h-none sm:h-[460px] w-full justify-center overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl">
+        <div
+          id="remotion-player-container"
+          className="relative mt-2 sm:mt-3 flex aspect-[9/16] max-h-[55vh] sm:max-h-none sm:h-[460px] w-full justify-center overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl"
+        >
           {videoRecord ? (
             <Player
+              ref={playerRef}
               component={RemotionVideo}
               durationInFrames={durationInFrames}
               compositionWidth={720}
@@ -161,7 +231,7 @@ const PlayerDialog = ({ playVideo, videoId }) => {
 
         {/* ================= MODAL ACTIONS ================= */}
         <div className="mt-4 sm:mt-5 flex flex-col gap-2.5 w-full">
-          {/* 📥 DOWNLOAD TO GALLERY BUTTON */}
+          {/* 📥 REAL VIDEO DOWNLOAD BUTTON */}
           <button
             type="button"
             onClick={handleDownloadToGallery}
@@ -171,12 +241,12 @@ const PlayerDialog = ({ playVideo, videoId }) => {
             {downloading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Downloading...</span>
+                <span>Saving Video ({downloadProgress}%)...</span>
               </>
             ) : (
               <>
                 <Download className="h-4 w-4" />
-                <span>Save to Gallery</span>
+                <span>Save Video to Gallery</span>
               </>
             )}
           </button>
