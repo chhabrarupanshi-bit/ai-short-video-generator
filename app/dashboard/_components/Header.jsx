@@ -15,7 +15,7 @@ const Header = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
   const { user } = useUser();
   const [credits, setCredits] = useState(100);
 
-  // Sync remaining user compute credits from Neon PostgreSQL
+  // 1. Initial Load: Database se user ke credits load karein
   useEffect(() => {
     async function fetchUserCredits() {
       const email = user?.primaryEmailAddress?.emailAddress;
@@ -36,6 +36,18 @@ const Header = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
 
     fetchUserCredits();
   }, [user]);
+
+  // 2. ⚡ Live Event Listener (Bina page refresh ke oval badge number update karega)
+  useEffect(() => {
+    const handleCreditUpdate = (event) => {
+      if (event?.detail?.credits !== undefined) {
+        setCredits(event.detail.credits);
+      }
+    };
+
+    window.addEventListener("creditsUpdated", handleCreditUpdate);
+    return () => window.removeEventListener("creditsUpdated", handleCreditUpdate);
+  }, []);
 
   return (
     <header className="sticky top-0 z-30 w-full overflow-hidden border-b border-[#12172b] bg-[#060813]">

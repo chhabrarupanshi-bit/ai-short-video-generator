@@ -26,7 +26,7 @@ import { saveVideoDataServer } from "@/app/_actions/video";
 
 export default function CreateNew() {
   const TEST_MODE = false;
-  const CREDITS_PER_VIDEO = 35; // 👈 100 me se 35 deduct hone par 2-3 video limit banegi
+  const CREDITS_PER_VIDEO = 35; // 100 me se 35 deduct hone par exact 2-3 videos ka limit set hoga
 
   // Dummy scenes preview testing ke liye
   const dummyScenes = [
@@ -100,7 +100,7 @@ export default function CreateNew() {
       return true;
     } catch (err) {
       console.error("Credit validation error:", err);
-      return true; // network fallback
+      return true;
     }
   };
 
@@ -116,6 +116,15 @@ export default function CreateNew() {
       });
 
       console.log("=== CREDITS DEDUCTION RESPONSE ===", res.data);
+
+      // ⚡ Instant Header Sync Dispatch (Bina reload ke badge update karega)
+      if (res.data?.success && res.data?.remainingCredits !== undefined) {
+        window.dispatchEvent(
+          new CustomEvent("creditsUpdated", {
+            detail: { credits: res.data.remainingCredits },
+          })
+        );
+      }
     } catch (err) {
       console.error("Failed to deduct credits in database:", err);
     }
@@ -281,10 +290,10 @@ export default function CreateNew() {
       return;
     }
 
-    // 🔒 Loophole Guard: Verify credits before running external APIs
+    // 🔒 Loophole Guard: Video generate shuru hone se pehle balance check
     const hasEnoughCredits = await verifyUserCredits();
     if (!hasEnoughCredits) {
-      return; // Stop generation pipeline immediately
+      return;
     }
 
     GetVideoScript();
@@ -324,7 +333,7 @@ export default function CreateNew() {
         setVideoId(resp.id);
         setPlayVideo(true);
 
-        // 💳 Loophole Fix: Deduct 35 credits in database atomically
+        // 💳 Loophole Fix: Database se 35 credits minus karo aur header ko signal bhejo
         await deductUserCredits();
       } else {
         console.error("Failed to save video to DB:", resp.error);
