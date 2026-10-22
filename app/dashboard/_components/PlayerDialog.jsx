@@ -12,17 +12,19 @@ import {
 import RemotionVideo from "./RemotionVideo";
 import { getVideoByIdServer } from "@/app/_actions/video";
 import { useRouter } from "next/navigation";
+import { Download, Loader2 } from "lucide-react";
 
 /**
  * PlayerDialog Component
  * Displays a 9:16 vertical short preview player powered by Remotion.
  * Features automated frame calculation based on caption timings,
- * responsive modal scaling for mobile devices, and routing controls.
+ * responsive modal scaling for mobile devices, and gallery download controls.
  */
 const PlayerDialog = ({ playVideo, videoId }) => {
   const [openDialog, setOpenDialog] = useState(false);
   const [videoRecord, setVideoRecord] = useState(null);
   const [durationInFrames, setDurationInFrames] = useState(120);
+  const [downloading, setDownloading] = useState(false);
 
   const router = useRouter();
 
@@ -58,6 +60,49 @@ const PlayerDialog = ({ playVideo, videoId }) => {
       }
     } catch (err) {
       console.error("Error fetching video data in dialog:", err);
+    }
+  };
+
+  // Direct device storage / gallery download handler
+  const handleDownloadToGallery = async () => {
+    const downloadTarget =
+      videoRecord?.videoUrl ||
+      videoRecord?.audioFileUrl ||
+      (videoRecord?.imageList && videoRecord?.imageList[0]);
+
+    if (!downloadTarget) {
+      alert("Koi downloadable media link nahi mila!");
+      return;
+    }
+
+    setDownloading(true);
+
+    try {
+      const response = await fetch(downloadTarget);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = blobUrl;
+
+      // File extension determination
+      const ext = downloadTarget.includes(".mp3")
+        ? "mp3"
+        : downloadTarget.includes(".png")
+        ? "png"
+        : "mp4";
+
+      link.download = `ai-short-video-${Date.now()}.${ext}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("Direct blob download error:", err);
+      // Fallback: Opens media file directly in browser tab so user can long-press save
+      window.open(downloadTarget, "_blank");
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -115,21 +160,43 @@ const PlayerDialog = ({ playVideo, videoId }) => {
         </div>
 
         {/* ================= MODAL ACTIONS ================= */}
-        <div className="mt-4 sm:mt-5 flex w-full gap-3">
+        <div className="mt-4 sm:mt-5 flex flex-col gap-2.5 w-full">
+          {/* 📥 DOWNLOAD TO GALLERY BUTTON */}
           <button
             type="button"
-            onClick={handleCancel}
-            className="flex-1 rounded-xl border border-white/10 bg-white/5 py-2.5 text-xs sm:text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white cursor-pointer active:scale-95"
+            onClick={handleDownloadToGallery}
+            disabled={downloading || !videoRecord}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold uppercase tracking-wider text-white shadow-lg shadow-emerald-500/25 transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-50 cursor-pointer"
           >
-            Cancel
+            {downloading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Downloading...</span>
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4" />
+                <span>Save to Gallery</span>
+              </>
+            )}
           </button>
-          <button
-            type="button"
-            onClick={handleExport}
-            className="flex-1 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 py-2.5 text-xs sm:text-sm font-semibold uppercase tracking-wider text-white shadow-lg shadow-indigo-600/30 transition-all hover:opacity-95 cursor-pointer active:scale-95"
-          >
-            Export
-          </button>
+
+          <div className="flex w-full gap-2.5">
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="flex-1 rounded-xl border border-white/10 bg-white/5 py-2.5 text-xs sm:text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white cursor-pointer active:scale-95"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleExport}
+              className="flex-1 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 py-2.5 text-xs sm:text-sm font-semibold uppercase tracking-wider text-white shadow-lg shadow-indigo-600/30 transition-all hover:opacity-95 cursor-pointer active:scale-95"
+            >
+              Dashboard
+            </button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
