@@ -17,19 +17,18 @@ import { Download, Loader2 } from "lucide-react";
 /**
  * PlayerDialog Component
  * Displays a 9:16 vertical short preview player powered by Remotion.
- * Features automated frame calculation based on caption timings,
- * responsive modal scaling for mobile devices, and gallery media export.
+ * Features full video capture (images + captions + audio) directly into a video file.
  */
 const PlayerDialog = ({ playVideo, videoId }) => {
   const [openDialog, setOpenDialog] = useState(false);
   const [videoRecord, setVideoRecord] = useState(null);
   const [durationInFrames, setDurationInFrames] = useState(120);
   const [downloading, setDownloading] = useState(false);
+  const [progressText, setProgressText] = useState("");
 
   const playerRef = useRef(null);
   const router = useRouter();
 
-  // Sync dialog visibility and fetch asset record when videoId updates
   useEffect(() => {
     setOpenDialog(Boolean(playVideo));
     if (videoId) {
@@ -37,14 +36,11 @@ const PlayerDialog = ({ playVideo, videoId }) => {
     }
   }, [playVideo, videoId]);
 
-  // Fetch full video record from Neon PostgreSQL via Server Action
   const GetVideoData = async () => {
     try {
-      console.log("Fetching DB row securely for videoId:", videoId);
       const res = await getVideoByIdServer(videoId);
 
       if (res?.success && res?.data) {
-        console.log("=== VIDEO ROW FETCHED SECURELY ===", res.data);
         setVideoRecord(res.data);
 
         const captions = res.data?.captions;
@@ -55,59 +51,114 @@ const PlayerDialog = ({ playVideo, videoId }) => {
             setDurationInFrames(calculatedFrames + 30);
           }
         }
-      } else {
-        console.warn("Video not found or fetch error:", res?.error);
       }
     } catch (err) {
-      console.error("Error fetching video data in dialog:", err);
+      console.error("Error fetching video data:", err);
     }
   };
 
-  // 📥 Instant Gallery / Device Save Handler (No CORS Block)
-  const handleDownloadToGallery = () => {
-    // 1. Agar backend generated direct video URL hai
-    if (videoRecord?.videoUrl && videoRecord.videoUrl.endsWith(".mp4")) {
-      window.open(videoRecord.videoUrl, "_blank");
-      return;
-    }
+  // 🎥 FULL VIDEO RECORDER (Visuals + Changing Images + Captions + Audio)
+  const handleDownloadFullVideo = async () => {
+    if (!videoRecord) return;
 
     setDownloading(true);
+    setProgressText("Starting video recorder...");
 
     try {
-      // 2. Client-side canvas export: Container se image/canvas track karein
       const playerWrapper = document.getElementById("remotion-player-container");
-      const imgTags = playerWrapper?.getElementsByTagName("img");
-      const currentActiveImg = imgTags && imgTags.length > 0 ? imgTags[0]?.src : null;
+      if (!playerWrapper) throw new Error("Player container not found");
 
-      const exportUrl = currentActiveImg || (videoRecord?.imageList && videoRecord.imageList[0]);
-
-      if (exportUrl) {
-        // Direct safe download trigger via ImageKit media attachment
-        const downloadUrl = exportUrl.includes("ik.imagekit.io")
-          ? `${exportUrl}?ik-attachment=true`
-          : exportUrl;
-
-        const link = document.createElement("a");
-        link.href = downloadUrl;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        link.setAttribute("download", `ai-creative-scene-${Date.now()}.png`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } else if (videoRecord?.audioFileUrl) {
-        // Fallback agar koi image na mile
-        window.open(videoRecord.audioFileUrl, "_blank");
-      } else {
-        alert("Download karne ke liye media file uplabdh nahi hai.");
+      // Player ko shuruat se start karein
+      if (playerRef.current) {
+        playerRef.current.seekTo(0);
+        playerRef.current.play();
       }
-    } catch (error) {
-      console.error("Download execution error:", error);
-      alert("Device storage me save karne me dikkat aayi.");
-    } finally {
-      setTimeout(() => {
+
+      // 1. Audio stream ready karein
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const dest = audioCtx.createMediaStreamDestination();
+
+      if (videoRecord?.audioFileUrl) {
+        const audio = new Audio();
+        audio.crossOrigin = "anonymous";
+        audio.src = videoRecord.audioFileUrl;
+        const source = audioCtx.createMediaElementSource(audio);
+        source.connect(dest);
+        source.connect(audioCtx.destination);
+        audio.play();
+      }
+
+      // 2. Video element / canvas stream capture
+      const videoOrCanvas =
+        playerWrapper.querySelector("canvas") ||
+        playerWrapper.querySelector("video");
+
+      let visualStream = null;
+      if (videoOrCanvas && typeof videoOrCanvas.captureStream === "function") {
+        visualStream = videoOrCanvas.captureStream(30);
+      }
+
+      // 3. Combined Tracks
+      const combinedTracks = [];
+      if (visualStream) {
+        visualStream.getVideoTracks().forEach((t) => combinedTracks.push(t));
+      }
+      dest.stream.getAudioTracks().forEach((t) => combinedTracks.push(t));
+
+      // Agar direct element capture na ho paye toh fallback standard video stream
+      if (combinedTracks.length === 0) {
+        alert("Video stream direct record nahi ho payi. Direct audio/image link open kar rahe hain.");
+        if (videoRecord?.videoUrl) window.open(videoRecord.videoUrl, "_blank");
         setDownloading(false);
-      }, 1000);
+        return;
+      }
+
+      const finalStream = new MediaStream(combinedTracks);
+      const mimeType = MediaRecorder.isTypeSupported("video/mp4")
+        ? "video/mp4"
+        : "video/webm";
+
+      const recorder = new MediaRecorder(finalStream, { mimeType });
+      const recordedChunks = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunks.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        const videoBlob = new Blob(recordedChunks, { type: mimeType });
+        const ext = mimeType.includes("mp4") ? "mp4" : "webm";
+        const downloadUrl = window.URL.createObjectURL(videoBlob);
+
+        const a = document.createElement("a");
+        a.href = downloadUrl;
+        a.download = `ai-short-video-${Date.now()}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(downloadUrl);
+
+        setDownloading(false);
+        setProgressText("");
+      };
+
+      recorder.start();
+      setProgressText("Recording video in progress...");
+
+      const totalDurationMs = (durationInFrames / 30) * 1000;
+
+      setTimeout(() => {
+        if (recorder.state === "recording") {
+          recorder.stop();
+          if (playerRef.current) playerRef.current.pause();
+        }
+      }, totalDurationMs + 500);
+
+    } catch (err) {
+      console.error("Recording error:", err);
+      alert("Browser ne direct video capture block kar diya. Media link direct open kar rahe hain.");
+      setDownloading(false);
+      setProgressText("");
     }
   };
 
@@ -168,22 +219,22 @@ const PlayerDialog = ({ playVideo, videoId }) => {
 
         {/* ================= MODAL ACTIONS ================= */}
         <div className="mt-4 sm:mt-5 flex flex-col gap-2.5 w-full">
-          {/* 📥 INSTANT GALLERY DOWNLOAD BUTTON */}
+          {/* 📥 REAL FULL VIDEO DOWNLOAD BUTTON */}
           <button
             type="button"
-            onClick={handleDownloadToGallery}
+            onClick={handleDownloadFullVideo}
             disabled={downloading || !videoRecord}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold uppercase tracking-wider text-white shadow-lg shadow-emerald-500/25 transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-50 cursor-pointer"
           >
             {downloading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Preparing Download...</span>
+                <span>{progressText || "Processing Video..."}</span>
               </>
             ) : (
               <>
                 <Download className="h-4 w-4" />
-                <span>Save to Gallery</span>
+                <span>Save Full Video to Gallery</span>
               </>
             )}
           </button>
