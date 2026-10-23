@@ -1,5 +1,8 @@
 "use client";
 
+// ==========================================
+// 1. REACT & REMOTION HOOKS IMPORTS
+// ==========================================
 import React, { useState, useEffect, useRef } from "react";
 import { Player } from "@remotion/player";
 import {
@@ -14,6 +17,12 @@ import { getVideoByIdServer } from "@/app/_actions/video";
 import { useRouter } from "next/navigation";
 import { Download, Loader2 } from "lucide-react";
 
+/**
+ * PlayerDialog Component
+ * Renders vertical preview via Remotion Player.
+ * Exports synchronized video file (scenes + captions + audio)
+ * silently without triggering live speaker playback during download.
+ */
 const PlayerDialog = ({ playVideo, videoId }) => {
   const [openDialog, setOpenDialog] = useState(false);
   const [videoRecord, setVideoRecord] = useState(null);
@@ -24,6 +33,7 @@ const PlayerDialog = ({ playVideo, videoId }) => {
   const playerRef = useRef(null);
   const router = useRouter();
 
+  // Sync modal open state and fetch record whenever videoId updates
   useEffect(() => {
     setOpenDialog(Boolean(playVideo));
     if (videoId) {
@@ -31,6 +41,7 @@ const PlayerDialog = ({ playVideo, videoId }) => {
     }
   }, [playVideo, videoId]);
 
+  // Fetch full video record from Neon PostgreSQL database
   const GetVideoData = async () => {
     try {
       const res = await getVideoByIdServer(videoId);
@@ -50,7 +61,9 @@ const PlayerDialog = ({ playVideo, videoId }) => {
     }
   };
 
-  // 🎬 Client-side Full Video Compositor (Images + Audio + Captions)
+  // =========================================================
+  // 🎬 SILENT VIDEO COMPOSITOR (ZERO SPEAKER NOISE)
+  // =========================================================
   const handleDownloadFullVideo = async () => {
     if (!videoRecord) return;
 
@@ -62,12 +75,13 @@ const PlayerDialog = ({ playVideo, videoId }) => {
       const captions = videoRecord?.captions || [];
       const audioUrl = videoRecord?.audioFileUrl;
 
+      // Vertical 9:16 canvas surface
       const canvas = document.createElement("canvas");
       canvas.width = 720;
       canvas.height = 1280;
       const ctx = canvas.getContext("2d");
 
-      // 1. Preload all scene images
+      // 1. Preload all scene images into memory
       setRenderProgress(15);
       const loadedImages = await Promise.all(
         images.map((src) => {
@@ -86,7 +100,7 @@ const PlayerDialog = ({ playVideo, videoId }) => {
         throw new Error("No visual scenes loaded");
       }
 
-      // 2. Setup Audio Track
+      // 2. Setup Isolated Audio Context (Recorder Only, No Speaker Routing)
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
       const audioDestination = audioContext.createMediaStreamDestination();
       let audioNode = null;
@@ -96,12 +110,14 @@ const PlayerDialog = ({ playVideo, videoId }) => {
         audio.crossOrigin = "anonymous";
         audio.src = audioUrl;
         audioNode = audio;
+
         const source = audioContext.createMediaElementSource(audio);
+        // ✅ KEY FIX: Audio is connected strictly to the recording stream destination.
+        // DO NOT connect to `audioContext.destination` so hardware speakers remain completely silent.
         source.connect(audioDestination);
-        source.connect(audioContext.destination);
       }
 
-      // 3. Setup Video Stream & MediaRecorder
+      // 3. Setup Canvas Stream + MediaRecorder
       const canvasStream = canvas.captureStream(30);
       const outputTracks = [...canvasStream.getVideoTracks()];
 
@@ -135,17 +151,24 @@ const PlayerDialog = ({ playVideo, videoId }) => {
         document.body.removeChild(a);
         URL.revokeObjectURL(downloadUrl);
 
+        if (audioContext.state !== "closed") {
+          audioContext.close();
+        }
+
         setDownloading(false);
         setRenderProgress(0);
       };
 
       recorder.start();
-      if (audioNode) audioNode.play();
+      if (audioNode) {
+        audioNode.currentTime = 0;
+        audioNode.play().catch((err) => console.log("Silent audio recording note:", err));
+      }
 
       const totalDurationSec = durationInFrames / 30;
       const startTime = performance.now();
 
-      // 4. Render Frame-by-Frame Loop
+      // 4. Frame-by-Frame Draw Loop (Scenes + Timed Subtitles)
       const renderLoop = () => {
         const elapsedSec = (performance.now() - startTime) / 1000;
         const elapsedMs = elapsedSec * 1000;
@@ -156,19 +179,18 @@ const PlayerDialog = ({ playVideo, videoId }) => {
           return;
         }
 
-        // Calculate active image
+        // Active scene based on timeline progression
         const imgIndex = Math.min(
           Math.floor((elapsedSec / totalDurationSec) * validImages.length),
           validImages.length - 1
         );
         const activeImg = validImages[imgIndex];
 
-        // Draw background scene
         if (activeImg) {
           ctx.drawImage(activeImg, 0, 0, 720, 1280);
         }
 
-        // Draw active caption text
+        // Synchronized animated caption drawing
         const currentCaption = captions.find(
           (c) => elapsedMs >= c.start && elapsedMs <= c.end
         );
@@ -179,12 +201,11 @@ const PlayerDialog = ({ playVideo, videoId }) => {
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
 
-          // Caption background tag
           const text = currentCaption.text;
           const textMetrics = ctx.measureText(text);
           const padding = 24;
 
-          ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+          ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
           ctx.roundRect?.(
             360 - textMetrics.width / 2 - padding,
             1050 - 35,
@@ -199,7 +220,6 @@ const PlayerDialog = ({ playVideo, videoId }) => {
           );
           ctx.fill();
 
-          // Caption text
           ctx.fillStyle = "#ffffff";
           ctx.fillText(text, 360, 1050);
           ctx.restore();
@@ -213,7 +233,7 @@ const PlayerDialog = ({ playVideo, videoId }) => {
 
     } catch (err) {
       console.error("Video export pipeline error:", err);
-      alert("Video export karne me dikkat aayi, please try again.");
+      alert("Video export karne me error aaya, kripya dobara koshish karein.");
       setDownloading(false);
       setRenderProgress(0);
     }
@@ -237,7 +257,7 @@ const PlayerDialog = ({ playVideo, videoId }) => {
           </DialogDescription>
         </DialogHeader>
 
-        {/* 9:16 PLAYER */}
+        {/* 9:16 REMOTION PREVIEW PLAYER */}
         <div className="relative mt-2 sm:mt-3 flex aspect-[9/16] max-h-[55vh] sm:max-h-none sm:h-[460px] w-full justify-center overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl">
           {videoRecord ? (
             <Player
@@ -267,7 +287,7 @@ const PlayerDialog = ({ playVideo, videoId }) => {
           )}
         </div>
 
-        {/* ACTIONS */}
+        {/* ACTION BUTTON CONTROLS */}
         <div className="mt-4 sm:mt-5 flex flex-col gap-2.5 w-full">
           <button
             type="button"
